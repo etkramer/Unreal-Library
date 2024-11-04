@@ -1,15 +1,16 @@
 using System.Diagnostics;
-using System.Numerics;
 using System.Runtime.InteropServices;
+using BmTest.Helpers;
 using UELib;
 using UELib.Core;
-using UELib.Engine;
 
 /// <summary>
 ///     Implements USkeletalMesh/Engine.SkeletalMesh customizations for RSS branch
 /// </summary>
 class BmSkeletalMesh : UObject
 {
+    public static BmSkeletalMesh? CurrentlyDeserializing = null;
+
     public FBoxSphereBounds Bounds;
     public UArray<UObject>? Materials;
 
@@ -23,6 +24,7 @@ class BmSkeletalMesh : UObject
 
     protected override void Deserialize()
     {
+        CurrentlyDeserializing = this;
         base.Deserialize();
 
         // Ensure package build
@@ -69,11 +71,10 @@ class BmSkeletalMesh : UObject
 
         public UBulkData<ushort> BulkData;
         public UBulkData<int> BulkData2;
-
         public FSkeletalMeshVertexBuffer3 GPUSkin;
-        public UArray<FSkeletalMeshVertexInfluences> ExtraVertexInfluences;
 
-        public UArray<UColor> VertexColor;
+        public UArray<FSkeletalMeshVertexInfluences>? ExtraVertexInfluences;
+        public UArray<UColor>? VertexColor;
 
         public void Deserialize(IUnrealStream stream)
         {
@@ -129,14 +130,20 @@ class BmSkeletalMesh : UObject
                 stream.ReadStruct(out GPUSkin);
             }
 
-            // NOTE: Everything is correct up until here.
-
             if (stream.Version >= 710)
             {
                 // https://github.com/gildor2/UEViewer/blob/a0bfb468d42be831b126632fd8a0ae6b3614f981/Unreal/UnrealMesh/UnMesh3.cpp#L1741C5-L1741C39
-                // TODO: Do we ever not want to serialize VertexColor?
-                // If things don't work, look here first.
-                //stream.ReadArray(out VertexColor);
+
+                // TODO: Don't use global state for this
+                var skeletalMesh = BmSkeletalMesh.CurrentlyDeserializing;
+                Debug.Assert(skeletalMesh != null);
+
+                // IF we have vertex colors, read them
+                var vertexColorsProp = skeletalMesh.Properties.Find("bHasVertexColors");
+                if (vertexColorsProp?.BoolValue == true)
+                {
+                    stream.ReadArray(out VertexColor);
+                }
             }
 
             // Post-UT3
@@ -174,8 +181,6 @@ class BmSkeletalMesh : UObject
 
         public UArray<FGPUVert3Half>? VertsHalf;
         public UArray<FGPUVert3Float>? VertsFloat;
-
-        public static int GNumGPUUVSets = 1;
 
         public void Deserialize(IUnrealStream stream)
         {
@@ -223,10 +228,12 @@ class BmSkeletalMesh : UObject
 
             if (bUseFullPrecisionUVs == 0)
             {
+                stream.Skip(4);
                 stream.ReadArray(out VertsHalf);
             }
             else
             {
+                stream.Skip(4);
                 stream.ReadArray(out VertsFloat);
             }
 
@@ -235,7 +242,7 @@ class BmSkeletalMesh : UObject
                 && stream.LicenseeVersion >= 190
             )
             {
-                stream.ReadArray(out UArray<int> _); // unk1
+                stream.ReadArray(out UArray<UVector> _); // unk1
                 stream.ReadInt32(); // unk2
             }
         }
@@ -301,35 +308,6 @@ class BmSkeletalMesh : UObject
         }
     }
 
-    private struct FGPUVert3Common
-    {
-        public FPackedNormal[] Normal;
-        public byte[] BoneIndex;
-        public byte[] BoneWeight;
-
-        public static FGPUVert3Common Deserialize(IUnrealStream stream)
-        {
-            FGPUVert3Common vert;
-
-            vert.Normal = new FPackedNormal[3];
-            stream.ReadStruct(out vert.Normal[0]);
-            stream.ReadStruct(out vert.Normal[2]);
-
-            vert.BoneIndex = new byte[FSoftVertex3.NUM_INFLUENCES_UE3];
-            vert.BoneWeight = new byte[FSoftVertex3.NUM_INFLUENCES_UE3];
-            for (int i = 0; i < FSoftVertex3.NUM_INFLUENCES_UE3; i++)
-            {
-                stream.Read(out vert.BoneIndex[i]);
-            }
-            for (int i = 0; i < FSoftVertex3.NUM_INFLUENCES_UE3; i++)
-            {
-                stream.Read(out vert.BoneWeight[i]);
-            }
-
-            return vert;
-        }
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     public record struct FVertexInfluence : IUnrealDeserializableClass, IUnrealAtomicStruct
     {
@@ -379,6 +357,38 @@ class BmSkeletalMesh : UObject
         }
     }
 
+    const int NUM_INFLUENCES_UE3 = 4;
+    public static int GNumGPUUVSets = 1;
+
+    private struct FGPUVert3Common
+    {
+        public FPackedNormal[] Normal;
+        public byte[] BoneIndex;
+        public byte[] BoneWeight;
+
+        public static FGPUVert3Common Deserialize(IUnrealStream stream)
+        {
+            FGPUVert3Common vert;
+
+            vert.Normal = new FPackedNormal[3];
+            stream.ReadStruct(out vert.Normal[0]);
+            stream.ReadStruct(out vert.Normal[2]);
+
+            vert.BoneIndex = new byte[NUM_INFLUENCES_UE3];
+            vert.BoneWeight = new byte[NUM_INFLUENCES_UE3];
+            for (int i = 0; i < NUM_INFLUENCES_UE3; i++)
+            {
+                stream.Read(out vert.BoneIndex[i]);
+            }
+            for (int i = 0; i < NUM_INFLUENCES_UE3; i++)
+            {
+                stream.Read(out vert.BoneWeight[i]);
+            }
+
+            return vert;
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public record struct FGPUVert3Half : IUnrealDeserializableClass, IUnrealAtomicStruct
     {
@@ -397,7 +407,7 @@ class BmSkeletalMesh : UObject
             BoneWeight = common.BoneWeight;
 
             stream.ReadStruct(out Pos);
-            UV = new FMeshUVHalf[FSkeletalMeshVertexBuffer3.GNumGPUUVSets];
+            UV = new FMeshUVHalf[GNumGPUUVSets];
             for (int i = 0; i < UV.Length; i++)
             {
                 stream.ReadStruct(out UV[i]);
@@ -423,7 +433,7 @@ class BmSkeletalMesh : UObject
             BoneWeight = common.BoneWeight;
 
             stream.ReadStruct(out Pos);
-            UV = new FMeshUVFloat[FSkeletalMeshVertexBuffer3.GNumGPUUVSets];
+            UV = new FMeshUVFloat[GNumGPUUVSets];
             for (int i = 0; i < UV.Length; i++)
             {
                 stream.ReadStruct(out UV[i]);
@@ -467,8 +477,6 @@ class BmSkeletalMesh : UObject
     [StructLayout(LayoutKind.Sequential)]
     public record struct FSoftVertex3 : IUnrealDeserializableClass, IUnrealAtomicStruct
     {
-        public const int NUM_INFLUENCES_UE3 = 4;
-
         public UVector Pos;
         public FPackedNormal[] Normal;
         public FMeshUVFloat[] UV;
@@ -580,6 +588,8 @@ class BmSkeletalMesh : UObject
         public ushort U;
         public ushort V;
 
+        public readonly UVector2D Vector => new() { X = U.HalfToFloat(), Y = V.HalfToFloat() };
+
         public void Deserialize(IUnrealStream stream)
         {
             stream.Read(out U);
@@ -591,6 +601,15 @@ class BmSkeletalMesh : UObject
     public record struct FPackedNormal : IUnrealDeserializableClass, IUnrealAtomicStruct
     {
         public uint Data;
+
+        public readonly UVector Vector =>
+            new()
+            {
+                // "x / 127.5 - 1" comes from Common.usf, TangentBias() macro
+                X = (Data & 0xFF) / 127.5f - 1,
+                Y = ((Data >> 8) & 0xFF) / 127.5f - 1,
+                Z = ((Data >> 16) & 0xFF) / 127.5f - 1
+            };
 
         public void Deserialize(IUnrealStream stream)
         {
