@@ -1,41 +1,69 @@
 ﻿using UELib;
+using UELib.Core;
 
 var gamePath =
-    "/Users/elikramer/Library/Application Support/CrossOver/Bottles/Win10/drive_c/Program Files (x86)/Steam/steamapps/common/Batman Arkham City GOTY/BmGame/CookedPCConsole/";
+    "/Users/elikramer/Library/Application Support/CrossOver/Bottles/Win10/drive_c/Program Files (x86)/Steam/steamapps/common/Batman Arkham City GOTY/BMGame/CookedPCConsole/";
+
+// Use 2-space independation
+UnrealConfig.Indention = "  ";
 
 // Load UPK package
-var upk = UnrealLoader.LoadPackage(Path.Combine(gamePath, "unpacked/Playable_Batman_Std_SF.upk"));
-upk.TryAddClassType("Material", typeof(UMaterialRS));
-upk.TryAddClassType("Texture2D", typeof(UTexture2DRS));
+var upk = UnrealLoader.LoadPackage(Path.Combine(gamePath, "unpacked/CV_Batwing.upk"));
+upk.TryAddClassType("Material", typeof(BmMaterial));
+upk.TryAddClassType("Texture2D", typeof(BmTexture2D));
+upk.TryAddClassType("SkeletalMesh", typeof(BmSkeletalMesh));
 upk.InitializePackage();
 
-// Print UPK contents
+// Print package imports/exports
 Console.WriteLine($"{upk.PackageName} {{");
-foreach (var export in upk.Exports.OrderBy(o => o.ClassIndex))
+foreach (var export in upk.Exports.OrderByDescending(o => (int)o))
 {
-    Console.WriteLine($"    {export.Class.ObjectName}'{export.ObjectName}'");
+    Console.WriteLine($"  {(int)export}: {export.Class.ObjectName}'{export.ObjectName}'");
+}
+foreach (var import in upk.Imports)
+{
+    Console.WriteLine($"  {(int)import}: {import.ClassName}'{import.ObjectName}'");
 }
 Console.WriteLine("}");
 
-DebugPrintTexture2D();
-//DebugPrintMaterial();
-
-void DebugPrintMaterial()
+// Test deserializing SkeletalMesh object
+DebugPrintMesh();
+void DebugPrintMesh()
 {
-    // Get Material object
-    var mat = upk.FindObject<UMaterialRS>("Batman_Body_Master_MAT");
-    mat.BeginDeserializing();
+    // Get SkeletalMesh object
+    var mesh = upk.FindObject<BmSkeletalMesh>("Batwing_NEW");
+    mesh.BeginDeserializing();
 
     Console.Write("\n");
-    Console.WriteLine(mat.Decompile());
+    Console.WriteLine(mesh.Decompile());
 }
 
+// Test deserializing Texture2D object
+DebugPrintTexture2D();
 void DebugPrintTexture2D()
 {
     // Get Texture2D object
-    var tex = upk.FindObject<UTexture2DRS>("Batman_V3_Body_D");
+    var tex = upk.FindObject<BmTexture2D>("Batwing_NEW_N");
     tex.BeginDeserializing();
 
     Console.Write("\n");
     Console.WriteLine(tex.Decompile());
+}
+
+// Test deserializing Material object
+DebugPrintMaterial();
+void DebugPrintMaterial()
+{
+    // Load material UClass
+    /*Console.Write("\n");
+    var core = UnrealLoader.LoadFullPackage(Path.Combine(gamePath, "unpacked/Core.upk"));
+    var matClass = core.FindObject<UClass>("Material");
+    Console.WriteLine(matClass.Decompile());*/
+
+    // Load material object
+    var mat = upk.FindObject<BmMaterial>("Batwing_NEW_MAT");
+    mat.BeginDeserializing();
+
+    Console.Write("\n");
+    Console.WriteLine(mat.Decompile());
 }

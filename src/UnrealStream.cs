@@ -878,6 +878,28 @@ namespace UELib
                 array.Add(element);
             }
         }
+
+        public static void ReadArray(this IUnrealStream stream, out UArray<short> array)
+        {
+            int c = stream.ReadLength();
+            array = new UArray<short>(c);
+            for (int i = 0; i < c; ++i)
+            {
+                stream.Read(out short element);
+                array.Add(element);
+            }
+        }
+
+        public static void ReadArray(this IUnrealStream stream, out UArray<ushort> array)
+        {
+            int c = stream.ReadLength();
+            array = new UArray<ushort>(c);
+            for (int i = 0; i < c; ++i)
+            {
+                stream.Read(out ushort element);
+                array.Add(element);
+            }
+        }
         
         public static void ReadArray(this IUnrealStream stream, out UArray<int> array)
         {
@@ -886,6 +908,17 @@ namespace UELib
             for (int i = 0; i < c; ++i)
             {
                 stream.Read(out int element);
+                array.Add(element);
+            }
+        }
+
+        public static void ReadArray(this IUnrealStream stream, out UArray<uint> array)
+        {
+            int c = stream.ReadLength();
+            array = new UArray<uint>(c);
+            for (int i = 0; i < c; ++i)
+            {
+                stream.Read(out uint element);
                 array.Add(element);
             }
         }

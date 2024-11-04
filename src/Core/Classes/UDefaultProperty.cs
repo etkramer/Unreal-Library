@@ -431,7 +431,7 @@ namespace UELib.Core
                     Type == PropertyType.NameProperty ||
                     Type == PropertyType.IntProperty ||
                     Type == PropertyType.FloatProperty ||
-                    Type == PropertyType.StructProperty ||
+                    //Type == PropertyType.StructProperty ||
                     Type == PropertyType.Vector ||
                     Type == PropertyType.Rotator ||
                     (Type == PropertyType.BoolProperty &&
@@ -479,6 +479,29 @@ namespace UELib.Core
             Record(nameof(ArrayIndex), ArrayIndex);
 
             DeserializeTypeDataUE3();
+
+            if (Type == PropertyType.StructProperty)
+            {
+                // Known layout (30b):
+                //   int16 type (0-2)
+                //   uint16 offset (2-4) - THESE HAVE INTERESTING VALUES!
+                //   UNameReference tag_name (4-12)
+                //   int32 tag_size (12-16)
+                //   int32 array_index (16-20)
+                //   UNameReference struct_name (20-28)
+                //   ushort padding (28-30)
+
+                // Duplicate name at end??
+                //Console.WriteLine(Name);
+                //Console.WriteLine($"  _TypeData.StructName: {_TypeData.StructName}");
+
+                //int remainingData = Size - 8;
+                //Console.WriteLine($"  {remainingData}b left");
+                //_Buffer.Skip(remainingData);
+
+                //_Buffer.Skip(2);
+            }
+
             return false;
         }
 #endif
