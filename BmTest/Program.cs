@@ -1,18 +1,11 @@
-﻿using UELib;
-using UELib.Core;
+﻿using BmTest;
 
 var gamePath =
     "/Users/elikramer/Library/Application Support/CrossOver/Bottles/Win10/drive_c/Program Files (x86)/Steam/steamapps/common/Batman Arkham City GOTY/BMGame/CookedPCConsole/";
 
-// Use 2-space independation
-UnrealConfig.Indention = "  ";
-
-// Load UPK package
-var upk = UnrealLoader.LoadPackage(Path.Combine(gamePath, "unpacked/CV_Batwing.upk"));
-upk.TryAddClassType("Material", typeof(BmMaterial));
-upk.TryAddClassType("Texture2D", typeof(BmTexture2D));
-upk.TryAddClassType("SkeletalMesh", typeof(BmSkeletalMesh));
-upk.InitializePackage();
+// Load game packages
+GameInfo.Init(Path.Combine(gamePath, "unpacked/"));
+var upk = GameInfo.GetPackage("CV_Batwing");
 
 // Print package imports/exports
 Console.WriteLine($"{upk.PackageName} {{");
