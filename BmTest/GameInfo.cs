@@ -34,9 +34,6 @@ public static class GameInfo
             }
 
             s_packages.Add(pkg.PackageName, pkg);
-
-            Console.WriteLine(pkg.PackageName);
-            Console.WriteLine(pkg.Exports?.Count);
         }
     }
 

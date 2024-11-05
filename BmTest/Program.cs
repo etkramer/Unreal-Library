@@ -7,15 +7,11 @@ var gamePath =
 GameInfo.Init(Path.Combine(gamePath, "unpacked/"));
 var upk = GameInfo.GetPackage("CV_Batwing");
 
-// Print package imports/exports
+// Print package exports
 Console.WriteLine($"{upk.PackageName} {{");
-foreach (var export in upk.Exports.OrderByDescending(o => (int)o))
+foreach (var export in upk.Exports)
 {
     Console.WriteLine($"  {(int)export}: {export.Class.ObjectName}'{export.ObjectName}'");
-}
-foreach (var import in upk.Imports)
-{
-    Console.WriteLine($"  {(int)import}: {import.ClassName}'{import.ObjectName}'");
 }
 Console.WriteLine("}");
 
@@ -44,15 +40,9 @@ void DebugPrintTexture2D()
 }
 
 // Test deserializing Material object
-DebugPrintMaterial();
+//DebugPrintMaterial();
 void DebugPrintMaterial()
 {
-    // Load material UClass
-    /*Console.Write("\n");
-    var core = UnrealLoader.LoadFullPackage(Path.Combine(gamePath, "unpacked/Core.upk"));
-    var matClass = core.FindObject<UClass>("Material");
-    Console.WriteLine(matClass.Decompile());*/
-
     // Load material object
     var mat = upk.FindObject<BmMaterial>("Batwing_NEW_MAT");
     mat.BeginDeserializing();

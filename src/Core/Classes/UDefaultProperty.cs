@@ -72,7 +72,7 @@ namespace UELib.Core
 
             // Array or Inlined object
             if ((_TempFlags & DoNotAppendName) != 0)
-                // The tag handles the name etc on its own.
+            // The tag handles the name etc on its own.
             {
                 return value;
             }
@@ -344,17 +344,17 @@ namespace UELib.Core
                     break;
 
                 case PropertyType.ArrayProperty:
-                    {
+                {
 #if DNF
                         if (_Buffer.Package.Build == UnrealPackage.GameBuild.BuildName.DNF &&
                             _Buffer.Version >= 124)
-                        {
-                            _Buffer.Read(out _TypeData.InnerTypeName);
-                            Record(nameof(_TypeData.InnerTypeName), _TypeData.InnerTypeName);
-                        }
-#endif
-                        break;
+                    {
+                        _Buffer.Read(out _TypeData.InnerTypeName);
+                        Record(nameof(_TypeData.InnerTypeName), _TypeData.InnerTypeName);
                     }
+#endif
+                    break;
+                }
             }
 
             Size = DeserializePackedSize((byte)(info & InfoSizeMask));
@@ -414,6 +414,14 @@ namespace UELib.Core
                 return true;
             }
 
+            //Console.WriteLine($"Reading from {_Buffer.Position - 2} (type {Type})");
+
+            if (_Buffer.Package.Build.Generation >= BuildGeneration.UE3)
+            {
+                Debug.Assert(Type != PropertyType.FixedArrayProperty);
+                Debug.Assert(Type != PropertyType.PointerProperty);
+            }
+
             if (_Buffer.Package.Build != UnrealPackage.GameBuild.BuildName.Batman3MP)
             {
                 ushort offset = _Buffer.ReadUInt16();
@@ -431,7 +439,6 @@ namespace UELib.Core
                     Type == PropertyType.NameProperty ||
                     Type == PropertyType.IntProperty ||
                     Type == PropertyType.FloatProperty ||
-                    //Type == PropertyType.StructProperty ||
                     Type == PropertyType.Vector ||
                     Type == PropertyType.Rotator ||
                     (Type == PropertyType.BoolProperty &&
@@ -475,31 +482,20 @@ namespace UELib.Core
             Size = _Buffer.ReadInt32();
             Record(nameof(Size), Size);
 
+            /*Console.WriteLine("  named");
+            Console.WriteLine($"  name {Name}");
+            Console.WriteLine($"  size {Size}");*/
+
             ArrayIndex = _Buffer.ReadInt32();
             Record(nameof(ArrayIndex), ArrayIndex);
 
-            DeserializeTypeDataUE3();
-
-            if (Type == PropertyType.StructProperty)
+            if (Type == PropertyType.StructProperty) // TEMP
             {
-                // Known layout (30b):
-                //   int16 type (0-2)
-                //   uint16 offset (2-4) - THESE HAVE INTERESTING VALUES!
-                //   UNameReference tag_name (4-12)
-                //   int32 tag_size (12-16)
-                //   int32 array_index (16-20)
-                //   UNameReference struct_name (20-28)
-                //   ushort padding (28-30)
-
-                // Duplicate name at end??
-                //Console.WriteLine(Name);
-                //Console.WriteLine($"  _TypeData.StructName: {_TypeData.StructName}");
-
-                //int remainingData = Size - 8;
-                //Console.WriteLine($"  {remainingData}b left");
-                //_Buffer.Skip(remainingData);
-
-                //_Buffer.Skip(2);
+                _Buffer.Skip(Size);
+            }
+            else
+            {
+                DeserializeTypeDataUE3();
             }
 
             return false;
@@ -536,7 +532,7 @@ namespace UELib.Core
                         // GOTYE didn't apply this upgrade, but did the EnumName update? ...
                         && _Buffer.Package.Build != UnrealPackage.GameBuild.BuildName.Borderlands_GOTYE
 #endif
-                       )
+                    )
                     {
                         BoolValue = _Buffer.ReadByte() > 0;
                     }
@@ -623,90 +619,90 @@ namespace UELib.Core
             switch (type)
             {
                 case PropertyType.BoolProperty:
+                {
+                    bool value;
+                    if (Size == 0)
                     {
-                        bool value;
-                        if (Size == 0)
-                        {
-                            Debug.Assert(BoolValue != null, nameof(BoolValue) + " != null");
-                            value = BoolValue.Value;
-                        }
-                        else
-                        {
-                            value = _Buffer.ReadByte() > 0;
-                        }
-
-                        Record(nameof(value), value);
-                        propertyValue = value ? "true" : "false";
-                        break;
+                        Debug.Assert(BoolValue != null, nameof(BoolValue) + " != null");
+                        value = BoolValue.Value;
                     }
+                    else
+                    {
+                        value = _Buffer.ReadByte() > 0;
+                    }
+
+                    Record(nameof(value), value);
+                    propertyValue = value ? "true" : "false";
+                    break;
+                }
 
                 case PropertyType.StrProperty:
-                    {
-                        string value = _Buffer.ReadString();
-                        Record(nameof(value), value);
-                        propertyValue = PropertyDisplay.FormatLiteral(value);
-                        break;
-                    }
+                {
+                    string value = _Buffer.ReadString();
+                    Record(nameof(value), value);
+                    propertyValue = PropertyDisplay.FormatLiteral(value);
+                    break;
+                }
 
                 case PropertyType.NameProperty:
-                    {
-                        var value = _Buffer.ReadNameReference();
-                        Record(nameof(value), value);
-                        propertyValue = $"\"{value}\"";
-                        break;
-                    }
+                {
+                    var value = _Buffer.ReadNameReference();
+                    Record(nameof(value), value);
+                    propertyValue = $"\"{value}\"";
+                    break;
+                }
 #if GIGANTIC
                 case PropertyType.JsonRefProperty:
+                {
+                    var jsonObjectName = _Buffer.ReadNameReference();
+                    var jsonObject = _Buffer.ReadObject<UObject>();
+
+                    if (jsonObject == null)
                     {
-                        var jsonObjectName = _Buffer.ReadNameReference();
-                        var jsonObject = _Buffer.ReadObject<UObject>();
-
-                        if (jsonObject == null)
-                        {
-                            propertyValue = "none";
-                            break;
-                        }
-
-                        // !!! Could be null for imports
-                        //Contract.Assert(jsonObject.Class != null);
-                        propertyValue = $"JsonRef<{jsonObject.GetClassName()}>'{jsonObjectName}'";
+                        propertyValue = "none";
                         break;
                     }
+
+                    // !!! Could be null for imports
+                    //Contract.Assert(jsonObject.Class != null);
+                    propertyValue = $"JsonRef<{jsonObject.GetClassName()}>'{jsonObjectName}'";
+                    break;
+                }
 #endif
 #if MASS_EFFECT
                 case PropertyType.StringRefProperty:
-                    {
-                        _Buffer.Read(out int index);
-                        Record(nameof(index), index);
+                {
+                    _Buffer.Read(out int index);
+                    Record(nameof(index), index);
 
-                        propertyValue = PropertyDisplay.FormatLiteral(index);
-                        break;
-                    }
-                
+                    propertyValue = PropertyDisplay.FormatLiteral(index);
+                    break;
+                }
+
                 case PropertyType.BioMask4Property:
-                    {
-                        _Buffer.Read(out byte value);
-                        Record(nameof(value), value);
+                {
+                    _Buffer.Read(out byte value);
+                    Record(nameof(value), value);
 
-                        propertyValue = PropertyDisplay.FormatLiteral(value);
-                        break;
-                    }
+                    propertyValue = PropertyDisplay.FormatLiteral(value);
+                    break;
+                }
 #endif
                 case PropertyType.IntProperty:
-                    {
-                        int value = _Buffer.ReadInt32();
-                        Record(nameof(value), value);
-                        propertyValue = PropertyDisplay.FormatLiteral(value);
-                        break;
-                    }
+                {
+                    int value = _Buffer.ReadInt32();
+                    Record(nameof(value), value);
+                    propertyValue = PropertyDisplay.FormatLiteral(value);
+                    break;
+                }
 #if BIOSHOCK
                 case PropertyType.QwordProperty:
-                    {
-                        long value = _Buffer.ReadInt64();
-                        Record(nameof(value), value);
-                        propertyValue = PropertyDisplay.FormatLiteral(value);
-                        break;
-                    }
+                {
+                    long value = _Buffer.ReadInt64();
+                    Record(nameof(value), value);
+                    propertyValue = PropertyDisplay.FormatLiteral(value);
+                    break;
+                }
 
                 case PropertyType.XWeakReferenceProperty:
                     propertyValue = "/* XWeakReference: (?=" + _Buffer.ReadName() + ",?=" + _Buffer.ReadName() +
@@ -714,251 +710,251 @@ namespace UELib.Core
                     break;
 #endif
                 case PropertyType.FloatProperty:
-                    {
-                        float value = _Buffer.ReadFloat();
-                        Record(nameof(value), value);
-                        propertyValue = PropertyDisplay.FormatLiteral(value);
-                        break;
-                    }
+                {
+                    float value = _Buffer.ReadFloat();
+                    Record(nameof(value), value);
+                    propertyValue = PropertyDisplay.FormatLiteral(value);
+                    break;
+                }
 
                 case PropertyType.ByteProperty:
-                    {
+                {
                         if (_Buffer.Version >= (uint)PackageObjectLegacyVersion.EnumTagNameAddedToBytePropertyTag &&
                             Size == 8)
-                        {
-                            string enumTagName = _Buffer.ReadName();
-                            Record(nameof(enumTagName), enumTagName);
+                    {
+                        string enumTagName = _Buffer.ReadName();
+                        Record(nameof(enumTagName), enumTagName);
                             propertyValue = _Buffer.Version >=
                                             (uint)PackageObjectLegacyVersion.EnumNameAddedToBytePropertyTag
                                 ? $"{_TypeData.EnumName}.{enumTagName}"
                                 : enumTagName;
-                        }
-                        else
-                        {
-                            byte value = _Buffer.ReadByte();
-                            Record(nameof(value), value);
-                            propertyValue = PropertyDisplay.FormatLiteral(value);
-                        }
-
-                        break;
                     }
+                    else
+                    {
+                        byte value = _Buffer.ReadByte();
+                        Record(nameof(value), value);
+                        propertyValue = PropertyDisplay.FormatLiteral(value);
+                    }
+
+                    break;
+                }
 
                 case PropertyType.InterfaceProperty:
-                    {
-                        var interfaceClass = _Buffer.ReadObject();
-                        Record(nameof(interfaceClass), interfaceClass);
-                        propertyValue = PropertyDisplay.FormatLiteral(interfaceClass);
-                        break;
-                    }
+                {
+                    var interfaceClass = _Buffer.ReadObject();
+                    Record(nameof(interfaceClass), interfaceClass);
+                    propertyValue = PropertyDisplay.FormatLiteral(interfaceClass);
+                    break;
+                }
 
                 case PropertyType.ComponentProperty:
                 case PropertyType.ObjectProperty:
+                {
+                    var constantObject = _Buffer.ReadObject();
+                    Record(nameof(constantObject), constantObject);
+                    if (constantObject == null)
                     {
-                        var constantObject = _Buffer.ReadObject();
-                        Record(nameof(constantObject), constantObject);
-                        if (constantObject == null)
-                        {
-                            // =none
-                            propertyValue = "none";
-                            break;
-                        }
+                        // =none
+                        propertyValue = "none";
+                        break;
+                    }
 
                         Debug.Assert(UDecompilingState.s_inlinedSubObjects != null,
                             "UDecompilingState.s_inlinedSubObjects != null");
 
                         bool isPendingInline =
                             UDecompilingState.s_inlinedSubObjects.TryGetValue(constantObject, out bool isInlined);
-                        // If the object is part of the current container, then it probably was an inlined declaration.
+                    // If the object is part of the current container, then it probably was an inlined declaration.
                         bool shouldInline = constantObject.Outer == _Container
                                             && !isPendingInline
                                             && !isInlined;
-                        if (shouldInline)
+                    if (shouldInline)
+                    {
+                        if ((deserializeFlags & DeserializeFlags.WithinStruct) == 0)
                         {
-                            if ((deserializeFlags & DeserializeFlags.WithinStruct) == 0)
+                            UDecompilingState.s_inlinedSubObjects.Add(constantObject, true);
+
+                            // Unknown objects are only deserialized on demand.
+                            constantObject.BeginDeserializing();
+
+                            propertyValue = constantObject.Decompile() + "\r\n";
+
+                            _TempFlags |= DoNotAppendName;
+                            if ((deserializeFlags & DeserializeFlags.WithinArray) != 0)
                             {
-                                UDecompilingState.s_inlinedSubObjects.Add(constantObject, true);
-
-                                // Unknown objects are only deserialized on demand.
-                                constantObject.BeginDeserializing();
-
-                                propertyValue = constantObject.Decompile() + "\r\n";
-
-                                _TempFlags |= DoNotAppendName;
-                                if ((deserializeFlags & DeserializeFlags.WithinArray) != 0)
-                                {
-                                    _TempFlags |= ReplaceNameMarker;
+                                _TempFlags |= ReplaceNameMarker;
                                     propertyValue += $"{UDecompilingState.Tabs}%ARRAYNAME%={constantObject.Name}";
-
-                                    break;
-                                }
-
-                                propertyValue += $"{UDecompilingState.Tabs}{Name}={constantObject.Name}";
 
                                 break;
                             }
 
-                            // Within a struct, to be inlined later on!
-                            UDecompilingState.s_inlinedSubObjects.Add(constantObject, false);
-                            propertyValue = $"{Name}={constantObject.Name}";
+                                propertyValue += $"{UDecompilingState.Tabs}{Name}={constantObject.Name}";
 
                             break;
                         }
 
-                        // Use shorthand for inlined objects.
-                        propertyValue = isInlined
-                            ? constantObject.Name
-                            : PropertyDisplay.FormatLiteral(constantObject);
+                        // Within a struct, to be inlined later on!
+                        UDecompilingState.s_inlinedSubObjects.Add(constantObject, false);
+                        propertyValue = $"{Name}={constantObject.Name}";
 
                         break;
                     }
+
+                    // Use shorthand for inlined objects.
+                    propertyValue = isInlined
+                        ? constantObject.Name
+                        : PropertyDisplay.FormatLiteral(constantObject);
+
+                    break;
+                }
 
                 case PropertyType.ClassProperty:
-                    {
-                        var classObject = _Buffer.ReadObject<UClass>();
-                        Record(nameof(classObject), classObject);
-                        propertyValue = PropertyDisplay.FormatLiteral(classObject);
-                        break;
-                    }
+                {
+                    var classObject = _Buffer.ReadObject<UClass>();
+                    Record(nameof(classObject), classObject);
+                    propertyValue = PropertyDisplay.FormatLiteral(classObject);
+                    break;
+                }
 
                 // Old StringProperty with a fixed size and null termination.
                 case PropertyType.StringProperty when _Buffer.Version < 100:
-                    {
-                        string str = _Buffer.ReadAnsiNullString();
-                        propertyValue = str;
-                        break;
-                    }
+                {
+                    string str = _Buffer.ReadAnsiNullString();
+                    propertyValue = str;
+                    break;
+                }
 
                 case PropertyType.DelegateProperty when _Buffer.Version >= 100:
-                    {
-                        // Can by any object, usually a class.
-                        var functionOwner = _Buffer.ReadObject();
-                        Record(nameof(functionOwner), functionOwner);
+                {
+                    // Can by any object, usually a class.
+                    var functionOwner = _Buffer.ReadObject();
+                    Record(nameof(functionOwner), functionOwner);
 
-                        string functionName = _Buffer.ReadName();
-                        Record(nameof(functionName), functionName);
+                    string functionName = _Buffer.ReadName();
+                    Record(nameof(functionName), functionName);
 
-                        // Can be null in UE3 packages
+                    // Can be null in UE3 packages
                         propertyValue = functionOwner != null
                             ? $"{functionOwner.Name}.{functionName}"
                             : $"{functionName}";
-                        break;
-                    }
+                    break;
+                }
 
                 #region HardCoded Struct Types
 
                 case PropertyType.Color:
-                    {
-                        _Buffer.ReadStructMarshal(out UColor color);
+                {
+                    _Buffer.ReadStructMarshal(out UColor color);
                         propertyValue += $"R={PropertyDisplay.FormatLiteral(color.R)}," +
                                          $"G={PropertyDisplay.FormatLiteral(color.G)}," +
                                          $"B={PropertyDisplay.FormatLiteral(color.B)}," +
                                          $"A={PropertyDisplay.FormatLiteral(color.A)}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.LinearColor:
-                    {
-                        _Buffer.ReadStructMarshal(out ULinearColor color);
+                {
+                    _Buffer.ReadStructMarshal(out ULinearColor color);
                         propertyValue += $"R={PropertyDisplay.FormatLiteral(color.R)}," +
                                          $"G={PropertyDisplay.FormatLiteral(color.G)}," +
                                          $"B={PropertyDisplay.FormatLiteral(color.B)}," +
                                          $"A={PropertyDisplay.FormatLiteral(color.A)}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Vector2D:
-                    {
-                        _Buffer.ReadStructMarshal(out UVector2D vector);
+                {
+                    _Buffer.ReadStructMarshal(out UVector2D vector);
                         propertyValue += $"X={PropertyDisplay.FormatLiteral(vector.X)}," +
                                          $"Y={PropertyDisplay.FormatLiteral(vector.Y)}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Vector:
-                    {
-                        _Buffer.ReadStructMarshal(out UVector vector);
+                {
+                    _Buffer.ReadStructMarshal(out UVector vector);
                         propertyValue += $"X={PropertyDisplay.FormatLiteral(vector.X)}," +
                                          $"Y={PropertyDisplay.FormatLiteral(vector.Y)}," +
                                          $"Z={PropertyDisplay.FormatLiteral(vector.Z)}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Vector4:
-                    {
-                        _Buffer.ReadStructMarshal(out UVector4 vector);
+                {
+                    _Buffer.ReadStructMarshal(out UVector4 vector);
                         propertyValue += $"X={PropertyDisplay.FormatLiteral(vector.X)}," +
                                          $"Y={PropertyDisplay.FormatLiteral(vector.Y)}," +
                                          $"Z={PropertyDisplay.FormatLiteral(vector.Z)}," +
                                          $"W={PropertyDisplay.FormatLiteral(vector.W)}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.TwoVectors:
-                    {
+                {
                         string v1 = DeserializeDefaultPropertyValue(PropertyType.Vector, ref deserializeFlags);
                         string v2 = DeserializeDefaultPropertyValue(PropertyType.Vector, ref deserializeFlags);
                         propertyValue += $"v1=({v1})," +
                                          $"v2=({v2})";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Rotator:
-                    {
-                        _Buffer.ReadStructMarshal(out URotator rotator);
+                {
+                    _Buffer.ReadStructMarshal(out URotator rotator);
                         propertyValue += $"Pitch={rotator.Pitch}," +
                                          $"Yaw={rotator.Yaw}," +
                                          $"Roll={rotator.Roll}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Guid:
-                    {
-                        _Buffer.ReadStructMarshal(out UGuid guid);
+                {
+                    _Buffer.ReadStructMarshal(out UGuid guid);
                         propertyValue += $"A={guid.A}," +
                                          $"B={guid.B}," +
                                          $"C={guid.C}," +
                                          $"D={guid.D}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Sphere:
-                    {
-                        AssertFastSerialize(_Buffer);
-                        _Buffer.ReadStructMarshal(out USphere sphere);
+                {
+                    AssertFastSerialize(_Buffer);
+                    _Buffer.ReadStructMarshal(out USphere sphere);
                         propertyValue += $"W={PropertyDisplay.FormatLiteral(sphere.W)}," +
                                          $"X={PropertyDisplay.FormatLiteral(sphere.X)}," +
                                          $"Y={PropertyDisplay.FormatLiteral(sphere.Y)}," +
                                          $"Z={PropertyDisplay.FormatLiteral(sphere.Z)}";
 
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Plane:
-                    {
-                        AssertFastSerialize(_Buffer);
-                        _Buffer.ReadStructMarshal(out UPlane plane);
+                {
+                    AssertFastSerialize(_Buffer);
+                    _Buffer.ReadStructMarshal(out UPlane plane);
                         propertyValue += $"W={PropertyDisplay.FormatLiteral(plane.W)}," +
                                          $"X={PropertyDisplay.FormatLiteral(plane.X)}," +
                                          $"Y={PropertyDisplay.FormatLiteral(plane.Y)}," +
                                          $"Z={PropertyDisplay.FormatLiteral(plane.Z)}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Scale:
-                    {
-                        _Buffer.ReadStructMarshal(out UScale scale);
+                {
+                    _Buffer.ReadStructMarshal(out UScale scale);
                         propertyValue += "Scale=(" +
                                          $"X={PropertyDisplay.FormatLiteral(scale.Scale.X)}," +
                                          $"Y={PropertyDisplay.FormatLiteral(scale.Scale.Y)}," +
                                          $"Z={PropertyDisplay.FormatLiteral(scale.Scale.Z)})," +
                                          $"SheerRate={PropertyDisplay.FormatLiteral(scale.SheerRate)}," +
                                          $"SheerAxis={scale.SheerAxis}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Box:
-                    {
-                        AssertFastSerialize(_Buffer);
+                {
+                    AssertFastSerialize(_Buffer);
                         string min = DeserializeDefaultPropertyValue(PropertyType.Vector, ref deserializeFlags);
                         string max = DeserializeDefaultPropertyValue(PropertyType.Vector, ref deserializeFlags);
                         string isValid =
@@ -966,301 +962,301 @@ namespace UELib.Core
                         propertyValue += $"Min=({min})," +
                                          $"Max=({max})," +
                                          $"IsValid={isValid}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Quat:
-                    {
-                        AssertFastSerialize(_Buffer);
-                        _Buffer.ReadStructMarshal(out UQuat quat);
+                {
+                    AssertFastSerialize(_Buffer);
+                    _Buffer.ReadStructMarshal(out UQuat quat);
                         propertyValue += $"X={PropertyDisplay.FormatLiteral(quat.X)}," +
                                          $"Y={PropertyDisplay.FormatLiteral(quat.Y)}," +
                                          $"Z={PropertyDisplay.FormatLiteral(quat.Z)}," +
                                          $"W={PropertyDisplay.FormatLiteral(quat.W)}";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.Matrix:
-                    {
-                        AssertFastSerialize(_Buffer);
-                        //_Buffer.ReadAtomicStruct(out UMatrix matrix);
+                {
+                    AssertFastSerialize(_Buffer);
+                    //_Buffer.ReadAtomicStruct(out UMatrix matrix);
                         string xPlane = DeserializeDefaultPropertyValue(PropertyType.Plane, ref deserializeFlags);
                         string yPlane = DeserializeDefaultPropertyValue(PropertyType.Plane, ref deserializeFlags);
                         string zPlane = DeserializeDefaultPropertyValue(PropertyType.Plane, ref deserializeFlags);
                         string wPlane = DeserializeDefaultPropertyValue(PropertyType.Plane, ref deserializeFlags);
                         propertyValue += $"XPlane=({xPlane}),YPlane=({yPlane}),ZPlane=({zPlane}),WPlane=({wPlane})";
-                        break;
-                    }
+                    break;
+                }
 
                 case PropertyType.IntPoint:
-                    {
+                {
                         string x = DeserializeDefaultPropertyValue(PropertyType.IntProperty, ref deserializeFlags);
                         string y = DeserializeDefaultPropertyValue(PropertyType.IntProperty, ref deserializeFlags);
-                        propertyValue += $"X={x},Y={y}";
-                        break;
-                    }
+                    propertyValue += $"X={x},Y={y}";
+                    break;
+                }
 
                 case PropertyType.PointRegion:
-                    {
+                {
                         string zone =
                             DeserializeDefaultPropertyValue(PropertyType.ObjectProperty, ref deserializeFlags);
                         string iLeaf = DeserializeDefaultPropertyValue(PropertyType.IntProperty, ref deserializeFlags);
                         string zoneNumber =
                             DeserializeDefaultPropertyValue(PropertyType.ByteProperty, ref deserializeFlags);
-                        propertyValue += $"Zone={zone},iLeaf={iLeaf},ZoneNumber={zoneNumber}";
-                        break;
-                    }
+                    propertyValue += $"Zone={zone},iLeaf={iLeaf},ZoneNumber={zoneNumber}";
+                    break;
+                }
 
                 #endregion
 
                 case PropertyType.StructProperty:
-                    {
-                        deserializeFlags |= DeserializeFlags.WithinStruct;
+                {
+                    deserializeFlags |= DeserializeFlags.WithinStruct;
 #if DNF
-                        if (_Buffer.Package.Build == UnrealPackage.GameBuild.BuildName.DNF)
-                        {
-                            goto nonAtomic;
-                        }
+                    if (_Buffer.Package.Build == UnrealPackage.GameBuild.BuildName.DNF)
+                    {
+                        goto nonAtomic;
+                    }
 #endif
-                        // Ugly hack, but this will do for now until this entire function gets "rewritten" :D
-                        if (Enum.TryParse(_TypeData.StructName, out PropertyType structPropertyType))
+                    // Ugly hack, but this will do for now until this entire function gets "rewritten" :D
+                    if (Enum.TryParse(_TypeData.StructName, out PropertyType structPropertyType))
+                    {
+                        // Not atomic if <=UE2,
+                        // TODO: Figure out all non-atomic structs
+                        if (_Buffer.Version < (uint)PackageObjectLegacyVersion.FastSerializeStructs)
                         {
-                            // Not atomic if <=UE2,
-                            // TODO: Figure out all non-atomic structs
-                            if (_Buffer.Version < (uint)PackageObjectLegacyVersion.FastSerializeStructs)
+                            switch (structPropertyType)
                             {
-                                switch (structPropertyType)
-                                {
-                                    case PropertyType.Quat:
-                                    case PropertyType.Scale: // not available in UE3
-                                    case PropertyType.Matrix:
-                                    case PropertyType.Box:
-                                    case PropertyType.Plane:
-                                        goto nonAtomic;
+                                case PropertyType.Quat:
+                                case PropertyType.Scale: // not available in UE3
+                                case PropertyType.Matrix:
+                                case PropertyType.Box:
+                                case PropertyType.Plane:
+                                    goto nonAtomic;
 
-                                    // None of these exist in older packages (UE2 or older). 
-                                    case PropertyType.LinearColor:
-                                    case PropertyType.Vector2D:
-                                    case PropertyType.Vector4:
-                                        goto nonAtomic;
-                                }
+                                // None of these exist in older packages (UE2 or older).
+                                case PropertyType.LinearColor:
+                                case PropertyType.Vector2D:
+                                case PropertyType.Vector4:
+                                    goto nonAtomic;
                             }
-                            else
+                        }
+                        else
+                        {
+                            switch (structPropertyType)
                             {
-                                switch (structPropertyType)
-                                {
-                                    //case PropertyType.Coords:
-                                    //case PropertyType.Range:
-                                    // Deprecated in UDK
-                                    case PropertyType.PointRegion:
-                                        goto nonAtomic;
-                                }
+                                //case PropertyType.Coords:
+                                //case PropertyType.Range:
+                                // Deprecated in UDK
+                                case PropertyType.PointRegion:
+                                    goto nonAtomic;
                             }
+                        }
 
                             propertyValue += DeserializeDefaultPropertyValue(structPropertyType, ref deserializeFlags);
-                            goto output;
-                        }
+                        goto output;
+                    }
 
                     nonAtomic:
-                        // We have to modify the outer so that dynamic arrays within this struct
-                        // will be able to find its variables to determine the array type.
-                        FindProperty<UProperty>(out _Outer);
-                        var structTags = new LinkedList<UDefaultProperty>();
-                        bool hasMore = true;
-                        while (true)
+                    // We have to modify the outer so that dynamic arrays within this struct
+                    // will be able to find its variables to determine the array type.
+                    FindProperty<UProperty>(out _Outer);
+                    var structTags = new LinkedList<UDefaultProperty>();
+                    bool hasMore = true;
+                    while (true)
+                    {
+                        var tag = new UDefaultProperty(_Container, _Outer);
+                        try
                         {
-                            var tag = new UDefaultProperty(_Container, _Outer);
-                            try
+                            // Might throw an exception if the struct is atomic
+                            if (tag.Deserialize())
                             {
-                                // Might throw an exception if the struct is atomic
-                                if (tag.Deserialize())
-                                {
-                                    structTags.AddLast(tag);
-                                    continue;
-                                }
+                                structTags.AddLast(tag);
+                                continue;
                             }
-                            catch (Exception ex)
-                            {
-                                // ignored
-                            }
-
-                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            // ignored
                         }
 
-                        foreach (var tag in structTags)
+                        break;
+                    }
+
+                    foreach (var tag in structTags)
+                    {
+                        string tagExpr = tag.Name;
+                        if (tag.ArrayIndex > 0)
                         {
-                            string tagExpr = tag.Name;
-                            if (tag.ArrayIndex > 0)
-                            {
                                 tagExpr += PropertyDisplay.FormatT3DElementAccess(tag.ArrayIndex.ToString(), _Buffer.Version);
-                            }
-
-                            propertyValue += $"{tagExpr}={tag.Value}";
-
-                            if (tag != structTags.Last.Value)
-                            {
-                                propertyValue += ",";
-                            }
                         }
+
+                        propertyValue += $"{tagExpr}={tag.Value}";
+
+                        if (tag != structTags.Last.Value)
+                        {
+                            propertyValue += ",";
+                        }
+                    }
 
                     output:
                         propertyValue = propertyValue.Length != 0
                             ? $"({propertyValue})"
                             : "none";
+                    break;
+                }
+
+                case PropertyType.ArrayProperty:
+                {
+                    int arraySize = _Buffer.ReadIndex();
+                    Record(nameof(arraySize), arraySize);
+                    if (arraySize == 0)
+                    {
+                        propertyValue = "none";
                         break;
                     }
 
-                case PropertyType.ArrayProperty:
-                    {
-                        int arraySize = _Buffer.ReadIndex();
-                        Record(nameof(arraySize), arraySize);
-                        if (arraySize == 0)
-                        {
-                            propertyValue = "none";
-                            break;
-                        }
-
-                        var arrayType = PropertyType.None;
+                    var arrayType = PropertyType.None;
                         if (_TypeData.InnerTypeName != null && !Enum.TryParse(_TypeData.InnerTypeName, out arrayType))
-                        {
-                            throw new Exception(
+                    {
+                        throw new Exception(
                                 $"Couldn't convert InnerTypeName \"{_TypeData.InnerTypeName}\" to PropertyType");
-                        }
+                    }
 
-                        // Find the property within the outer/owner or its inheritances.
-                        // If found it has to modify the outer so structs within this array can find their array variables.
-                        // Additionally we need to know the property to determine the array's type.
-                        if (arrayType == PropertyType.None)
+                    // Find the property within the outer/owner or its inheritances.
+                    // If found it has to modify the outer so structs within this array can find their array variables.
+                    // Additionally we need to know the property to determine the array's type.
+                    if (arrayType == PropertyType.None)
+                    {
+                        var property = FindProperty<UArrayProperty>(out _Outer);
+                        if (property?.InnerProperty != null)
                         {
-                            var property = FindProperty<UArrayProperty>(out _Outer);
-                            if (property?.InnerProperty != null)
-                            {
-                                arrayType = property.InnerProperty.Type;
-                            }
-                            // If we did not find a reference to the associated property(because of imports)
-                            // then try to determine the array's type by scanning the defined array types.
+                            arrayType = property.InnerProperty.Type;
+                        }
+                        // If we did not find a reference to the associated property(because of imports)
+                        // then try to determine the array's type by scanning the defined array types.
                             else if (UnrealConfig.VariableTypes != null && UnrealConfig.VariableTypes.ContainsKey(Name))
+                        {
+                            var varTuple = UnrealConfig.VariableTypes[Name];
+                            if (varTuple != null)
                             {
-                                var varTuple = UnrealConfig.VariableTypes[Name];
-                                if (varTuple != null)
-                                {
-                                    arrayType = varTuple.Item2;
-                                }
+                                arrayType = varTuple.Item2;
                             }
                         }
+                    }
 
-                        if (arrayType == PropertyType.None)
+                    if (arrayType == PropertyType.None)
+                    {
+                        propertyValue = "/* Array type was not detected. */";
+                        break;
+                    }
+
+                    deserializeFlags |= DeserializeFlags.WithinArray;
+                    if ((deserializeFlags & DeserializeFlags.WithinStruct) != 0)
+                    {
+                        // Hardcoded fix for InterpCurve and InterpCurvePoint.
+                        if (string.Compare(Name, "Points", StringComparison.OrdinalIgnoreCase) == 0)
                         {
-                            propertyValue = "/* Array type was not detected. */";
-                            break;
+                            arrayType = PropertyType.StructProperty;
                         }
 
-                        deserializeFlags |= DeserializeFlags.WithinArray;
-                        if ((deserializeFlags & DeserializeFlags.WithinStruct) != 0)
+                        for (var i = 0; i < arraySize; ++i)
                         {
-                            // Hardcoded fix for InterpCurve and InterpCurvePoint.
-                            if (string.Compare(Name, "Points", StringComparison.OrdinalIgnoreCase) == 0)
-                            {
-                                arrayType = PropertyType.StructProperty;
-                            }
-
-                            for (var i = 0; i < arraySize; ++i)
-                            {
                                 propertyValue += DeserializeDefaultPropertyValue(arrayType, ref deserializeFlags)
-                                                 + (i != arraySize - 1 ? "," : string.Empty);
-                            }
-
-                            propertyValue = $"({propertyValue})";
+                                + (i != arraySize - 1 ? "," : string.Empty);
                         }
-                        else
+
+                        propertyValue = $"({propertyValue})";
+                    }
+                    else
+                    {
+                        for (var i = 0; i < arraySize; ++i)
                         {
-                            for (var i = 0; i < arraySize; ++i)
-                            {
                                 string elementAccessText =
                                         PropertyDisplay.FormatT3DElementAccess(i.ToString(), _Buffer.Version);
                                 string elementValue = DeserializeDefaultPropertyValue(arrayType, ref deserializeFlags);
-                                if ((_TempFlags & ReplaceNameMarker) != 0)
-                                {
+                            if ((_TempFlags & ReplaceNameMarker) != 0)
+                            {
                                     propertyValue += elementValue.Replace("%ARRAYNAME%", $"{Name}{elementAccessText}");
-                                    _TempFlags = 0x00;
-                                }
-                                else
-                                {
-                                    propertyValue += $"{Name}{elementAccessText}={elementValue}";
-                                }
+                                _TempFlags = 0x00;
+                            }
+                            else
+                            {
+                                propertyValue += $"{Name}{elementAccessText}={elementValue}";
+                            }
 
-                                if (i != arraySize - 1)
-                                {
-                                    propertyValue += "\r\n" + UDecompilingState.Tabs;
-                                }
+                            if (i != arraySize - 1)
+                            {
+                                propertyValue += "\r\n" + UDecompilingState.Tabs;
                             }
                         }
-
-                        _TempFlags |= DoNotAppendName;
-                        break;
                     }
+
+                    _TempFlags |= DoNotAppendName;
+                    break;
+                }
 
                 case PropertyType.MapProperty:
-                    {
+                {
                         if (Size == 0) break;
 
-                        int count = _Buffer.ReadIndex();
-                        Record(nameof(count), count);
+                    int count = _Buffer.ReadIndex();
+                    Record(nameof(count), count);
 
-                        var property = FindProperty<UMapProperty>(out _Outer);
-                        if (property == null)
-                        {
-                            propertyValue = "// Unable to decompile Map data.";
-                            break;
-                        }
+                    var property = FindProperty<UMapProperty>(out _Outer);
+                    if (property == null)
+                    {
+                        propertyValue = "// Unable to decompile Map data.";
+                        break;
+                    }
 
-                        propertyValue = "(";
-                        for (int i = 0; i < count; ++i)
-                        {
+                    propertyValue = "(";
+                    for (int i = 0; i < count; ++i)
+                    {
                             propertyValue +=
                                 DeserializeDefaultPropertyValue(property.ValueProperty.Type, ref deserializeFlags);
-                            if (i + 1 != count)
-                            {
-                                propertyValue += ",";
-                            }
+                        if (i + 1 != count)
+                        {
+                            propertyValue += ",";
                         }
-
-                        propertyValue += ")";
-                        break;
                     }
+
+                    propertyValue += ")";
+                    break;
+                }
 
                 case PropertyType.FixedArrayProperty:
+                {
+                    // We require the InnerProperty to properly deserialize this data type.
+                    var property = FindProperty<UFixedArrayProperty>(out _Outer);
+                    if (property == null)
                     {
-                        // We require the InnerProperty to properly deserialize this data type.
-                        var property = FindProperty<UFixedArrayProperty>(out _Outer);
-                        if (property == null)
-                        {
-                            propertyValue = "// Unable to decompile FixedArray data.";
-                            break;
-                        }
-
-                        var innerType = property.InnerProperty.Type;
-                        propertyValue = "(";
-                        for (int i = 0; i < property.Count; ++i)
-                        {
-                            propertyValue += DeserializeDefaultPropertyValue(innerType, ref deserializeFlags);
-                            if (i + 1 != property.Count)
-                            {
-                                propertyValue += ",";
-                            }
-                        }
-
-                        propertyValue += ")";
+                        propertyValue = "// Unable to decompile FixedArray data.";
                         break;
                     }
+
+                    var innerType = property.InnerProperty.Type;
+                    propertyValue = "(";
+                    for (int i = 0; i < property.Count; ++i)
+                    {
+                            propertyValue += DeserializeDefaultPropertyValue(innerType, ref deserializeFlags);
+                        if (i + 1 != property.Count)
+                        {
+                            propertyValue += ",";
+                        }
+                    }
+
+                    propertyValue += ")";
+                    break;
+                }
 
                 // Note: We don't have to verify the package's version here.
                 case PropertyType.PointerProperty:
-                    {
-                        int offset = _Buffer.ReadInt32();
-                        propertyValue = PropertyDisplay.FormatLiteral(offset);
-                        break;
-                    }
+                {
+                    int offset = _Buffer.ReadInt32();
+                    propertyValue = PropertyDisplay.FormatLiteral(offset);
+                    break;
+                }
 
                 default:
                     throw new Exception($"Unsupported property tag type {Type}");

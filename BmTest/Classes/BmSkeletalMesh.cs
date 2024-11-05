@@ -20,6 +20,11 @@ partial class BmSkeletalMesh : UObject
 
     public UArray<FStaticLODModel3> LODModels;
 
+    public BmSkeletalMesh()
+    {
+        ShouldDeserializeOnDemand = true;
+    }
+
     protected override void Deserialize()
     {
         CurrentlyDeserializing = this;
