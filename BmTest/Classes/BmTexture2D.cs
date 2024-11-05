@@ -10,10 +10,16 @@ class BmTexture2D : UTexture2D
 {
     protected override void Deserialize()
     {
-        base.Deserialize();
-
         // Ensure package build
         Debug.Assert(_Buffer.Package.Build == BuildGeneration.RSS);
+
+        if (DeserializationState.HasFlag(ObjectState.Deserialied))
+        {
+            return;
+        }
+
+        // Deserialize UObject props
+        base.Deserialize();
 
         // Fix property names per https://github.com/gildor2/UEViewer/blob/a0bfb468d42be831b126632fd8a0ae6b3614f981/Unreal/UnObject.cpp#L686
         Properties.Find("self[0x0E0]").Name = new UName("SizeX");

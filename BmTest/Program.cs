@@ -5,12 +5,18 @@ var gamePath =
 
 // Load game packages
 GameInfo.Init(Path.Combine(gamePath, "unpacked/"));
-var upk = GameInfo.GetPackage("CV_Batwing");
+var upk = GameInfo.GetPackage("Playable_Batman_Std_SF");
 
 // Print package exports
 Console.WriteLine($"{upk.PackageName} {{");
 foreach (var export in upk.Exports)
 {
+    // Skip a bunch of clutter
+    if (export.Class.ObjectName.Name.Contains("MaterialExpression"))
+    {
+        continue;
+    }
+
     Console.WriteLine($"  {(int)export}: {export.Class.ObjectName}'{export.ObjectName}'");
 }
 Console.WriteLine("}");
@@ -20,33 +26,31 @@ DebugPrintMesh();
 void DebugPrintMesh()
 {
     // Get SkeletalMesh object
-    var mesh = upk.FindObject<BmSkeletalMesh>("Batwing_NEW");
+    var mesh = upk.FindObject<BmSkeletalMesh>("Batman_Head_Skin");
     mesh.BeginDeserializing();
+
+    // Crash occurs where a PointerProperty follows an ArrayProperty
+    // PointerProperties shouldn't exist in the first place
+    // But ArrayProperties don't usually cause things to break?
 
     Console.Write("\n");
     Console.WriteLine(mesh.Decompile());
-}
 
-// Test deserializing Texture2D object
-DebugPrintTexture2D();
-void DebugPrintTexture2D()
-{
-    // Get Texture2D object
-    var tex = upk.FindObject<BmTexture2D>("Batwing_NEW_N");
-    tex.BeginDeserializing();
-
-    Console.Write("\n");
-    Console.WriteLine(tex.Decompile());
+    foreach (var mat in mesh.Materials)
+    {
+        mat.BeginDeserializing();
+        Console.WriteLine(mat.Decompile());
+    }
 }
 
 // Test deserializing Material object
-//DebugPrintMaterial();
+/*DebugPrintMaterial();
 void DebugPrintMaterial()
 {
     // Load material object
-    var mat = upk.FindObject<BmMaterial>("Batwing_NEW_MAT");
+    var mat = upk.FindObject<BmMaterial>("Batman_Body_Master_MAT");
     mat.BeginDeserializing();
 
     Console.Write("\n");
     Console.WriteLine(mat.Decompile());
-}
+}*/

@@ -414,12 +414,14 @@ namespace UELib.Core
                 return true;
             }
 
-            //Console.WriteLine($"Reading from {_Buffer.Position - 2} (type {Type})");
+            Console.WriteLine($"Reading from {_Buffer.Position - 2} (type {Type})");
 
             if (_Buffer.Package.Build.Generation >= BuildGeneration.UE3)
             {
                 Debug.Assert(Type != PropertyType.FixedArrayProperty);
-                Debug.Assert(Type != PropertyType.PointerProperty);
+
+                // NOTE: Type == 16 is NAME_ObjectNCRProperty, not PointerProperty!
+                // And also, it's an offset property.
             }
 
             if (_Buffer.Package.Build != UnrealPackage.GameBuild.BuildName.Batman3MP)
@@ -441,6 +443,7 @@ namespace UELib.Core
                     Type == PropertyType.FloatProperty ||
                     Type == PropertyType.Vector ||
                     Type == PropertyType.Rotator ||
+                    Type == (PropertyType)16 || /*ObjectNCRProperty*/
                     (Type == PropertyType.BoolProperty &&
                      _Buffer.Package.Build == UnrealPackage.GameBuild.BuildName.Batman4))
                 {
@@ -471,7 +474,23 @@ namespace UELib.Core
                     }
 
                     Name = new UName($"self[0x{offset:X3}]");
-                    DeserializeTypeDataUE3();
+
+                    Console.WriteLine("  simple");
+                    Console.WriteLine($"  name {Name}");
+                    Console.WriteLine($"  offset {offset}");
+
+                    if (Type == (PropertyType)16 /*ObjectNCRProperty*/)
+                    {
+                        // TODO: Data size is either 4 or 12.
+                        // Leaning toward 4 right now, as the 2nd offset value makes sense.
+                        // Look here if things break.
+                        _Buffer.Skip(4);
+                    }
+                    else
+                    {
+                        DeserializeTypeDataUE3();
+                    }
+
                     return false;
                 }
             }
@@ -482,9 +501,9 @@ namespace UELib.Core
             Size = _Buffer.ReadInt32();
             Record(nameof(Size), Size);
 
-            /*Console.WriteLine("  named");
+            Console.WriteLine("  named");
             Console.WriteLine($"  name {Name}");
-            Console.WriteLine($"  size {Size}");*/
+            Console.WriteLine($"  size {Size}");
 
             ArrayIndex = _Buffer.ReadInt32();
             Record(nameof(ArrayIndex), ArrayIndex);

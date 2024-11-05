@@ -27,12 +27,18 @@ partial class BmSkeletalMesh : UObject
 
     protected override void Deserialize()
     {
-        CurrentlyDeserializing = this;
-        base.Deserialize();
-
         // Ensure package build
         Debug.Assert(_Buffer.Package.Build == BuildGeneration.RSS);
 
+        if (DeserializationState.HasFlag(ObjectState.Deserialied))
+        {
+            return;
+        }
+
+        // Deserialize UObject props
+        base.Deserialize();
+
+        CurrentlyDeserializing = this;
         _Buffer.ReadStruct(out Bounds);
 
         if (
