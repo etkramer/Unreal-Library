@@ -407,6 +407,9 @@ namespace UELib.Core
         /// <returns>True if this is the last tag.</returns>
         private bool DeserializeTagByOffset()
         {
+            // Ensure RSS engine
+            Debug.Assert(_Buffer.Package.Build == BuildGeneration.RSS);
+
             Type = (PropertyType)_Buffer.ReadInt16();
             Record(nameof(Type), Type.ToString());
             if (Type == PropertyType.None)
@@ -416,12 +419,22 @@ namespace UELib.Core
 
             Console.WriteLine($"Reading from {_Buffer.Position - 2} (type {Type})");
 
-            if (_Buffer.Package.Build.Generation >= BuildGeneration.UE3)
+            // RSS property overrides
+            if (Type < (PropertyType)1 || Type > (PropertyType)17)
             {
-                Debug.Assert(Type != PropertyType.FixedArrayProperty);
-
-                // NOTE: Type == 16 is NAME_ObjectNCRProperty, not PointerProperty!
-                // And also, it's an offset property.
+                throw new NotImplementedException();
+            }
+            else if (Type == (PropertyType)16)
+            {
+                // TODO: Support ObjectNCRProperty properly. This works for now
+                // because IntProperty is also the same size and a nameless prop.
+                Type = PropertyType.IntProperty;
+            }
+            else if (Type == (PropertyType)17)
+            {
+                // TODO: Support GuidProperty properly. This line
+                // isn't actually doing anything right now (still 17).
+                Type = PropertyType.QwordProperty;
             }
 
             if (_Buffer.Package.Build != UnrealPackage.GameBuild.BuildName.Batman3MP)
@@ -443,7 +456,6 @@ namespace UELib.Core
                     Type == PropertyType.FloatProperty ||
                     Type == PropertyType.Vector ||
                     Type == PropertyType.Rotator ||
-                    Type == (PropertyType)16 || /*ObjectNCRProperty*/
                     (Type == PropertyType.BoolProperty &&
                      _Buffer.Package.Build == UnrealPackage.GameBuild.BuildName.Batman4))
                 {
@@ -479,17 +491,7 @@ namespace UELib.Core
                     Console.WriteLine($"  name {Name}");
                     Console.WriteLine($"  offset {offset}");
 
-                    if (Type == (PropertyType)16 /*ObjectNCRProperty*/)
-                    {
-                        // TODO: Data size is either 4 or 12.
-                        // Leaning toward 4 right now, as the 2nd offset value makes sense.
-                        // Look here if things break.
-                        _Buffer.Skip(4);
-                    }
-                    else
-                    {
-                        DeserializeTypeDataUE3();
-                    }
+                    DeserializeTypeDataUE3();
 
                     return false;
                 }

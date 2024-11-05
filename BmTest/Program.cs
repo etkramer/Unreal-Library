@@ -44,7 +44,7 @@ void DebugPrintMesh()
 }
 
 // Test deserializing Material object
-/*DebugPrintMaterial();
+DebugPrintMaterial();
 void DebugPrintMaterial()
 {
     // Load material object
@@ -53,4 +53,4 @@ void DebugPrintMaterial()
 
     Console.Write("\n");
     Console.WriteLine(mat.Decompile());
-}*/
+}
